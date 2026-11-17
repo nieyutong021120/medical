@@ -1,0 +1,1 @@
+"""FastAPI 后端包：包装 medical_rag 提供 HTTP API。"""

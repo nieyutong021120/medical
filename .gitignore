@@ -1,0 +1,39 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+
+# production
+build/
+dist/
+
+# editor
+.vscode/*
+!.vscode/extensions.json
+
+# misc
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# backend SQLite 对话历史（含 WAL 附属文件）
+backend/data/
+*.db
+*.db-wal
+*.db-shm
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 大体积产物（超过 GitHub 100MB 单文件上限，不入库）
+# 检索索引：由 medical_rag/scripts/build_index.py + build_inverted_bm25.py 本地重建
+medical_rag/vector_index/
+# 开源数据集：从 HuggingFace FreedomIntelligence/Huatuo26M-Lite 下载放回原位
+Huatuo-Lite/format_data.jsonl
