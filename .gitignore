@@ -35,5 +35,11 @@ venv/
 # 大体积产物（超过 GitHub 100MB 单文件上限，不入库）
 # 检索索引：由 medical_rag/scripts/build_index.py + build_inverted_bm25.py 本地重建
 medical_rag/vector_index/
+medical_rag/vector_index_score5/
 # 开源数据集：从 HuggingFace FreedomIntelligence/Huatuo26M-Lite 下载放回原位
 Huatuo-Lite/format_data.jsonl
+# score5 子集：备用产物（服务器现用 data/filter_score5.py 原位过滤自建）
+Huatuo-Lite/format_data_score5.jsonl
+# 过滤脚本的全量备份 / 临时文件
+Huatuo-Lite/*.full
+Huatuo-Lite/*.tmp

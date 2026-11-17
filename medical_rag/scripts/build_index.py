@@ -1,7 +1,10 @@
-"""离线构建 FAISS + BM25 索引（17.8万条QA，CPU编码耗时较长，建一次即可）
+"""离线构建 FAISS + BM25 索引（CPU编码耗时较长，建一次即可）
 
 运行（仓库根目录）：
-  D:/miniconda/envs/all-in-rag/python.exe medical_rag/scripts/build_index.py
+  python medical_rag/scripts/build_index.py
+始终读 Huatuo-Lite/format_data.jsonl、写 medical_rag/vector_index。
+低内存服务器流程：data/download_data.py 下载全量 -> data/filter_score5.py 原位过滤为
+score=5 -> 重跑本脚本重建索引（此时 format_data.jsonl 已是 score5 子集）。
 """
 
 import os
@@ -23,12 +26,19 @@ from kb_modules import IngestionModule, IndexingModule
 
 
 def main():
+    # 旧：位置参数选择数据/索引目录（已弃用）；现数据文件由 data/filter_score5.py 原位替换，
+    # 这里始终读标准名 format_data.jsonl / 写 vector_index，服务器过滤后直接重跑本脚本即可。
+    # data_path = Path(sys.argv[1]) if len(sys.argv) > 1 else RAG_DIR.parent / "Huatuo-Lite" / "format_data.jsonl"
+    # index_dir = Path(sys.argv[2]) if len(sys.argv) > 2 else RAG_DIR / "vector_index"
+    data_path = RAG_DIR.parent / "Huatuo-Lite" / "format_data.jsonl"
+    index_dir = RAG_DIR / "vector_index"
     config = MedicalConfig(
-        data_path=str(RAG_DIR.parent / "Huatuo-Lite" / "format_data.jsonl"),
-        index_save_path=str(RAG_DIR / "vector_index"),
+        data_path=str(data_path),
+        index_save_path=str(index_dir),
     )
     ingestion = IngestionModule(config.data_path)
     ingestion.load_documents()
+    print(f"数据版本: {data_path.name} -> 索引目录: {index_dir}", flush=True)
 
     indexing = IndexingModule(
         model_name=config.embedding_model,

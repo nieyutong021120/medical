@@ -91,6 +91,12 @@ def client_id(request: Request, response: Response) -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
+    # 旧：RAG_VARIANT 双版本路径（已弃用）；数据文件由 data/filter_score5.py 原位替换，此处读标准名
+    # config = rag.MedicalConfig(
+    #     data_path=str(_data_path),
+    #     index_save_path=str(_index_path),
+    # )
+    # logger.info("加载数据版本: %s (%s)", _rag_variant, _data_path.name)
     config = rag.MedicalConfig(
         data_path=str(ROOT / "Huatuo-Lite" / "format_data.jsonl"),
         index_save_path=str(RAG_DIR / "vector_index"),
@@ -108,6 +114,14 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Medical Assistant RAG API", lifespan=lifespan)
 # 旧：allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"]（写死前端来源）
 _frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+# 旧：RAG_VARIANT 环境变量双版本选择（已弃用）；现由 data/filter_score5.py 原位替换数据文件，
+# 后端与 build_index 读同一标准文件名，无需任何开关。
+# _RAG_VARIANTS = {
+#     "full": (ROOT / "Huatuo-Lite" / "format_data.jsonl", RAG_DIR / "vector_index"),
+#     "score5": (ROOT / "Huatuo-Lite" / "format_data_score5.jsonl", RAG_DIR / "vector_index_score5"),
+# }
+# _rag_variant = os.environ.get("RAG_VARIANT", "full")
+# _data_path, _index_path = _RAG_VARIANTS.get(_rag_variant, _RAG_VARIANTS["full"])
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[_frontend_url],

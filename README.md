@@ -76,6 +76,22 @@ npm run build      # 静态产物输出到 out/，用任意静态服务器托管
 
 注意：不要在 dev 服务器运行时执行 build——两者共享 `.next` 缓存会冲突。
 
+## 低内存部署：score=5 子集（服务器脚本流程）
+
+2GB 内存跑全量会 OOM（实测就绪 RSS ~2122MB）；score=5 子集 22767 条实测就绪 RSS ~871MB，2GB 可用。服务器全程脚本、**零代码改动、零环境变量**：
+
+```bash
+# 服务器，仓库根目录，依次执行
+python data/download_data.py                # 1 下载全量 format_data.jsonl（默认 hf-mirror 镜像）
+python data/filter_score5.py                # 2 原位过滤为 score=5（首次自动留 .full 备份）
+python medical_rag/scripts/build_index.py   # 3 用过滤后的数据重建索引
+# 4 启动后端（systemd / uvicorn），读到的已是 score5 数据 + 索引
+```
+
+过滤脚本把结果**写回标准文件名** `format_data.jsonl`，故 `build_index.py` 与后端无需任何修改即自动使用子集（无需在构建文件里替换路径）。恢复全量：把 `format_data.jsonl.full` 复制回 `format_data.jsonl` 再重跑 build_index（仅 ≥4GB 机器）。
+
+本机保留全量数据与索引。`vector_index_score5/`（~148MB）与 `format_data_score5.jsonl`（16MB）为先前生成的备用产物，可 scp 上传替代服务器自建索引；均不入库（见 `.gitignore`）。前端统计取自 `/api/health`，自动跟随所加载数据，无需改前端。
+
 ## API 一览
 
 | 接口 | 说明 |
@@ -92,6 +108,8 @@ app/                        Next.js 外壳：layout / page / globals.css（唯�
 components/medical/         前端组件：MedicalAssistant 主外壳、ChatPanel、ChatMessage（流式）、
                             KnowledgePanel、SourceDrawer、Sidebar、Icons
 data/medicalKnowledge.js    内容层：助手信息、6 科室卡片、热门问题、24 条 score=5 样例、兜底统计
+data/download_data.py       服务器步骤1：HF 镜像下载全量 format_data.jsonl
+data/filter_score5.py       服务器步骤2：原位过滤 score=5（留 .full 备份）
 lib/config.js               前端 API 基址（NEXT_PUBLIC_API_URL，构建期注入）
 lib/medicalApi.js           后端客户端：health / ask / SSE 流式解析
 lib/medicalStore.js         会话 CRUD 客户端
@@ -103,12 +121,14 @@ medical_rag/                RAG 引擎
   config.py                 MedicalConfig（数据路径/模型/top_k 等）
   main.py                   MedicalSystem：检索→科室投票→疾病聚合→生成（含流式）
   kb_modules/               ingestion / indexing / retrieval / dialogue / generation
-  scripts/build_index.py    离线索引构建器
+  scripts/build_index.py    离线索引构建器（读标准名 format_data.jsonl / 写 vector_index）
   scripts/build_inverted_bm25.py  BM25 倒排索引转换 + 逐位一致性校验
   scripts/eval_retrieval.py 检索离线评测（结果 eval_results.json）
-  vector_index/             FAISS + BM25 持久化产物（本地重建，不入库）
+  vector_index/             全量 FAISS + BM25 产物（本地重建，不入库）
+  vector_index_score5/      score5 备用索引（可 scp 上传替代服务器自建，不入库）
 Huatuo-Lite/                数据集目录（README.md / my_dataset.py 入库；
-                            format_data.jsonl 约 132MB 需自行下载，不入库）
+                            format_data.jsonl 约 132MB 需自行下载，不入库；
+                            format_data_score5.jsonl 备用子集，不入库）
 ```
 
 ## 检索与生成机制
