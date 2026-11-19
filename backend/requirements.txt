@@ -1,0 +1,5 @@
+# 后端运行依赖（RAG 依赖见 medical_rag/requirements.txt，两者都需安装）
+fastapi>=0.115.0
+uvicorn>=0.30.0
+python-dotenv>=1.0.0
+PyJWT>=2.0

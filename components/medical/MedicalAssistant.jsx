@@ -13,7 +13,8 @@ import KnowledgePanel from "./KnowledgePanel.jsx";
 import SourceDrawer from "./SourceDrawer.jsx";
 import AuthPanel from "./AuthPanel.jsx";
 import { ASSISTANT, FALLBACK_STATS } from "../../data/medicalKnowledge.js";
-import { askBackend, askBackendStream, fetchHealth } from "../../lib/medicalApi.js";
+// 旧：import { askBackend, askBackendStream, fetchHealth }（askBackend 为 SSE 失败回退，已弃用）
+import { askBackendStream, fetchHealth } from "../../lib/medicalApi.js";
 import { API_BASE } from "../../lib/config.js";
 import { getToken, fetchMe, logout as authLogout } from "../../lib/auth.js";
 import {
@@ -269,7 +270,17 @@ export default function MedicalAssistant() {
     };
     const failBot = (err) => {
       const detail = err.name === "AbortError" ? "请求超时" : (err.message || "网络错误");
-      const errText = `无法连接医疗后端（${API_BASE}）：${detail}。请先启动后端服务后重试。`;
+      // 旧：所有失败统一提示"无法连接后端"；现区分限流/网络错误/问答失败
+      // const errText = `无法连接医疗后端（${API_BASE}）：${detail}。请先启动后端服务后重试。`;
+      const rateLimited = /429|rate ?limit|RPM|too many requests/i.test(detail);
+      let errText;
+      if (rateLimited) {
+        errText = "请求过于频繁，请稍后再试（模型接口每分钟调用次数有限）。";
+      } else if (err instanceof TypeError) {
+        errText = `无法连接医疗后端（${API_BASE}）：${detail}。请先启动后端服务后重试。`;
+      } else {
+        errText = `问答失败：${detail}。请稍后重试。`;
+      }
       if (metaSeen) {
         patchMsg(convId, botId, (m) => ({ ...m, kind: "error", text: errText, streaming: false }));
       } else {
@@ -285,18 +296,18 @@ export default function MedicalAssistant() {
       onDelta: (_d, full) => patchMsg(convId, botId, (m) => ({ ...m, text: full })),
     })
       .then((result) => finishBot(result.answer || ""))
-      .catch(async (err) => {
-        // SSE 未建立时回退一次性接口（如代理不支持流式）
-        if (!metaSeen) {
-          try {
-            const result = await askBackend(text);
-            metaSeen = true;
-            setPending(false);
-            insertBot(result);
-            finishBot(result.answer || "");
-            return;
-          } catch { /* 回退也失败，走错误气泡 */ }
-        }
+      .catch((err) => {
+        // 旧：SSE 未建立时回退一次性接口 /api/ask；会双倍消耗 LLM 调用（RPM=3 易 429），已弃用
+        // if (!metaSeen) {
+        //   try {
+        //     const result = await askBackend(text);
+        //     metaSeen = true;
+        //     setPending(false);
+        //     insertBot(result);
+        //     finishBot(result.answer || "");
+        //     return;
+        //   } catch { /* 回退也失败，走错误气泡 */ }
+        // }
         failBot(err);
       })
       .finally(() => setPending(false));

@@ -36,7 +36,8 @@
 
 ```bash
 # Python 依赖（建议 conda/venv 独立环境）
-pip install -r medical_rag/requirements.txt
+pip install -r medical_rag/requirements.txt   # RAG 引擎
+pip install -r backend/requirements.txt       # FastAPI 后端（fastapi/uvicorn/PyJWT/dotenv）
 ```
 
 ### 2. 离线构建索引（首次必须，CPU 嵌入 17.8 万条约需数十分钟）
@@ -51,7 +52,7 @@ python medical_rag/scripts/build_inverted_bm25.py  # 由 bm25.pkl 转换 inverte
 ### 3. 启动后端（仓库根目录）
 
 ```bash
-python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 ```
 
 - 先复制 `medical_rag/.env.example` 为 `medical_rag/.env`，填入 `MOONSHOT_API_KEY`（override=True 为唯一权威来源）。
@@ -119,8 +120,14 @@ lib/auth.js                 JWT 客户端：token 存取（localStorage）+ 注�
 lib/medicalApi.js           后端客户端：health / ask / SSE 流式解析（带 Bearer 头）
 lib/medicalStore.js         会话 CRUD 客户端（带 Bearer 头）
 .env / .env.example         前端配置（NEXT_PUBLIC_API_URL）
-backend/main.py             FastAPI：包装 medical_rag，JWT 认证、SSE 与会话接口
-backend/db.py               SQLite 用户与会话存储（data/medical_assistant.db）
+backend/                    FastAPI 后端（分层结构，入口 backend.app.main:app）
+  app/main.py               只做组装：创建 app、挂中间件、include 路由、lifespan
+  app/core/                 config.py（Settings/环境加载）、logging.py（setup_logging）
+  app/db/database.py        SQLite 连接/init_db + 用户与会话 CRUD（data/medical_assistant.db）
+  app/schemas/              Pydantic 模型：auth / ask / conversation
+  app/services/             业务逻辑：rag_service（RAG 引导）、auth_service（JWT）、conversation_service
+  app/routers/              APIRouter：health / auth / ask / conversations + deps（current_user）
+  requirements.txt          后端运行依赖（RAG 依赖另见 medical_rag/requirements.txt）
 backend/.env / .env.example 后端配置（FRONTEND_URL CORS 白名单、JWT_SECRET）
 medical_rag/                RAG 引擎
   config.py                 MedicalConfig（数据路径/模型/top_k 等）
