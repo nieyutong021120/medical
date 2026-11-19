@@ -1,14 +1,19 @@
-"""SQLite 持久化层：对话历史（按 client_id 隔离）。
+"""SQLite 持久化层：用户账号（JWT 认证）+ 对话历史（按用户 id 隔离）。
 
 标准库 sqlite3，WAL 模式，每请求独立连接（线程安全，配合 FastAPI sync 端点线程池）。
-DB 文件 backend/data/medical_assistant.db。conversations + messages 两表：
+DB 文件 backend/data/medical_assistant.db。users + conversations + messages 三表：
+conversations.client_id 列现存用户 id（旧 Cookie 匿名 id 数据已弃用）；
 消息核心字段进列，kind 相关的异构字段（points/note/sources/...）进 payload_json，
 fresh（打字机瞬时态）不落盘。删除会话级联删除其消息。
 """
 
+import hashlib
+import hmac
 import json
+import secrets
 import sqlite3
 import time
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -24,6 +29,13 @@ _INSERT_MSG = (
 )
 
 _SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+    id            TEXT PRIMARY KEY,
+    username      TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    salt          TEXT NOT NULL,
+    created_at    INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS conversations (
     id          TEXT PRIMARY KEY,
     client_id   TEXT NOT NULL,
@@ -71,6 +83,53 @@ def init_db():
     with _connect() as conn:
         conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(_SCHEMA)
+
+
+# ---------- 用户账号（JWT 认证） ----------
+
+def _hash_password(password: str, salt_hex: str) -> str:
+    return hashlib.pbkdf2_hmac(
+        "sha256", password.encode("utf-8"), bytes.fromhex(salt_hex), 100_000
+    ).hex()
+
+
+def create_user(username: str, password: str):
+    """注册成功返回 {id, username}；用户名已存在返回 None。"""
+    user_id = str(uuid.uuid4())
+    salt = secrets.token_hex(16)
+    try:
+        with _connect() as conn:
+            conn.execute(
+                "INSERT INTO users (id, username, password_hash, salt, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (user_id, username, _hash_password(password, salt), salt, _now_ms()),
+            )
+    except sqlite3.IntegrityError:
+        return None
+    return {"id": user_id, "username": username}
+
+
+def get_user_by_name(username: str):
+    """含密码哈希/盐，仅供登录校验使用。"""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT id, username, password_hash, salt FROM users WHERE username = ?",
+            (username,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_user_by_id(user_id: str):
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT id, username FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def verify_password(user: dict, password: str) -> bool:
+    expected = _hash_password(password, user["salt"])
+    return hmac.compare_digest(expected, user["password_hash"])
 
 
 def _msg_to_row(conv_id: str, msg: dict):

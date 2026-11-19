@@ -12,14 +12,15 @@
 - **相关疾病提示**：聚合检索结果的 related_diseases 字段，去重取前 6
 - **相似病例展示**：每条回答附参考 QA 卡片，点击打开抽屉查看医生原始回答
 - **知识库概览**：总量/科室分布/平均回答长度统计（来自后端实测），24 条 score=5 样例可搜索、按科室筛选
-- **会话管理**：后端 SQLite 持久化 + httponly Cookie 身份隔离；多会话、删除可撤销、消息反馈
+- **用户认证**：注册/登录 + JWT（HS256，7 天有效，localStorage 存储），全部业务接口需登录
+- **会话管理**：后端 SQLite 持久化 + 按用户 id 隔离；多会话、删除可撤销、消息反馈
 
 ## 技术栈
 
 | 层 | 技术 |
 | --- | --- |
 | 前端 | Next.js 15（App Router，`output: 'export'` 静态导出）、React 19、Tailwind CSS v4、anime.js 4 |
-| 后端 | FastAPI + uvicorn，SSE 流式接口，SQLite（WAL）会话存储 |
+| 后端 | FastAPI + uvicorn，SSE 流式接口，JWT（PyJWT）用户认证，SQLite（WAL）用户与会话存储 |
 | RAG | LangChain 模块骨架：ingestion / indexing / retrieval / dialogue / generation |
 | 检索 | FAISS（向量）+ BM25（jieba 分词），RRF 融合 + score 加权 |
 | 模型 | 嵌入 BAAI/bge-small-zh-v1.5（本地 HF 缓存，离线加载）；生成 kimi-k3（Moonshot API，temperature 固定 1） |
@@ -54,7 +55,7 @@ python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
 - 先复制 `medical_rag/.env.example` 为 `medical_rag/.env`，填入 `MOONSHOT_API_KEY`（override=True 为唯一权威来源）。
-- 前端地址从 `backend/.env` 的 `FRONTEND_URL` 读取（用作 CORS 跨域白名单，默认 `http://localhost:3000`）。模板见 `backend/.env.example`。监听 host/port 由 uvicorn 命令行控制。
+- 前端地址从 `backend/.env` 的 `FRONTEND_URL` 读取（用作 CORS 跨域白名单，默认 `http://localhost:3000`）；同文件还须配置 `JWT_SECRET`（JWT 签名密钥，缺失则启动报错）。模板见 `backend/.env.example`。监听 host/port 由 uvicorn 命令行控制。
 
 ### 4. 启动前端
 
@@ -65,7 +66,7 @@ npm run dev
 
 打开 <http://localhost:3000>。前端 API 基址由根 `.env` 的 `NEXT_PUBLIC_API_URL` 配置（默认 `http://localhost:8000`，模板见 `.env.example`）；后端未启动时展示样例数据并给出错误气泡。
 
-> **部署注意**：前端为静态导出（`output: 'export'`），`NEXT_PUBLIC_API_URL` 在 **构建期** 注入，改地址后须重新 `npm run build`。该地址须与访问前端所用 host **同站**，否则 SameSite=Lax 的 client_id Cookie 不生效；同时把前端地址设为后端 `backend/.env` 的 `FRONTEND_URL`。
+> **部署注意**：前端为静态导出（`output: 'export'`），`NEXT_PUBLIC_API_URL` 在 **构建期** 注入，改地址后须重新 `npm run build`。身份走 JWT（Authorization 头），不再受 Cookie 同站限制；只需把前端地址设为后端 `backend/.env` 的 `FRONTEND_URL`（CORS 白名单），并配置 `JWT_SECRET`。
 
 ### 生产构建
 
@@ -96,27 +97,31 @@ python medical_rag/scripts/build_index.py   # 3 用过滤后的数据重建索�
 
 | 接口 | 说明 |
 | --- | --- |
-| `GET /api/health` | 就绪状态 + 知识库统计（总量/科室分布/平均分等） |
-| `POST /api/ask` | 一次性问答 `{question}` → `{answer, sources, department, related_diseases, route, disclaimer}` |
-| `POST /api/ask/stream` | SSE 流式：`meta`（溯源/科室/疾病/免责声明）→ `delta`（文本增量）→ `done` / `error` |
-| `/api/conversations*`、`/api/messages*` | 会话与消息 CRUD（Cookie client_id 隔离，id 由后端生成） |
+| `GET /api/health` | 就绪状态 + 知识库统计（总量/科室分布/平均分等），公开 |
+| `POST /api/auth/register` | 注册 `{username, password}` → `{token, user}`（用户名 2-32 字符，密码 ≥6 位） |
+| `POST /api/auth/login` | 登录 `{username, password}` → `{token, user}` |
+| `GET /api/auth/me` | 校验 token，返回当前用户（需 `Authorization: Bearer`） |
+| `POST /api/ask` | 一次性问答 `{question}` → `{answer, sources, department, related_diseases, route, disclaimer}`（需登录） |
+| `POST /api/ask/stream` | SSE 流式：`meta`（溯源/科室/疾病/免责声明）→ `delta`（文本增量）→ `done` / `error`（需登录） |
+| `/api/conversations*`、`/api/messages*` | 会话与消息 CRUD（按 JWT 用户 id 隔离，id 由后端生成；需登录） |
 
 ## 项目结构
 
 ```
 app/                        Next.js 外壳：layout / page / globals.css（唯一 CSS 入口）
-components/medical/         前端组件：MedicalAssistant 主外壳、ChatPanel、ChatMessage（流式）、
-                            KnowledgePanel、SourceDrawer、Sidebar、Icons
+components/medical/         前端组件：MedicalAssistant 主外壳、AuthPanel（登录/注册）、ChatPanel、
+                            ChatMessage（流式）、KnowledgePanel、SourceDrawer、Sidebar、Icons
 data/medicalKnowledge.js    内容层：助手信息、6 科室卡片、热门问题、24 条 score=5 样例、兜底统计
 data/download_data.py       服务器步骤1：HF 镜像下载全量 format_data.jsonl
 data/filter_score5.py       服务器步骤2：原位过滤 score=5（留 .full 备份）
 lib/config.js               前端 API 基址（NEXT_PUBLIC_API_URL，构建期注入）
-lib/medicalApi.js           后端客户端：health / ask / SSE 流式解析
-lib/medicalStore.js         会话 CRUD 客户端
+lib/auth.js                 JWT 客户端：token 存取（localStorage）+ 注册/登录/me + 401 广播
+lib/medicalApi.js           后端客户端：health / ask / SSE 流式解析（带 Bearer 头）
+lib/medicalStore.js         会话 CRUD 客户端（带 Bearer 头）
 .env / .env.example         前端配置（NEXT_PUBLIC_API_URL）
-backend/main.py             FastAPI：包装 medical_rag，SSE 与会话接口
-backend/db.py               SQLite 会话存储（data/medical_assistant.db）
-backend/.env / .env.example 后端配置（FRONTEND_URL，CORS 白名单）
+backend/main.py             FastAPI：包装 medical_rag，JWT 认证、SSE 与会话接口
+backend/db.py               SQLite 用户与会话存储（data/medical_assistant.db）
+backend/.env / .env.example 后端配置（FRONTEND_URL CORS 白名单、JWT_SECRET）
 medical_rag/                RAG 引擎
   config.py                 MedicalConfig（数据路径/模型/top_k 等）
   main.py                   MedicalSystem：检索→科室投票→疾病聚合→生成（含流式）

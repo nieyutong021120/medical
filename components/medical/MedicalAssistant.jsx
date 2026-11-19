@@ -3,16 +3,19 @@
 // 医疗助手主组件（改自 components/hr/HRAssistant.jsx）：
 // - 问答改为 SSE 真流式（meta 先到→渲染溯源/科室，delta 逐步填充回答）
 // - 顶栏状态与欢迎页统计来自 /api/health 实测
-// 会话管理（后端SQLite+Cookie身份、乐观渲染、撤销删除）逻辑原样沿用。
+// 会话管理（后端SQLite+JWT用户身份、乐观渲染、撤销删除）逻辑原样沿用。
+// 旧：身份为 Cookie 匿名 client_id；现改 JWT 登录认证（lib/auth.js + AuthPanel）。
 import { useCallback, useEffect, useRef, useState } from "react";
 import Icon from "./Icons.jsx";
 import Sidebar from "./Sidebar.jsx";
 import ChatPanel from "./ChatPanel.jsx";
 import KnowledgePanel from "./KnowledgePanel.jsx";
 import SourceDrawer from "./SourceDrawer.jsx";
+import AuthPanel from "./AuthPanel.jsx";
 import { ASSISTANT, FALLBACK_STATS } from "../../data/medicalKnowledge.js";
 import { askBackend, askBackendStream, fetchHealth } from "../../lib/medicalApi.js";
 import { API_BASE } from "../../lib/config.js";
+import { getToken, fetchMe, logout as authLogout } from "../../lib/auth.js";
 import {
   fetchConversations, createConversation, patchConversation,
   deleteConversation as apiDeleteConversation, appendMessage, patchMessage,
@@ -33,6 +36,8 @@ export default function MedicalAssistant() {
   const [hydrated, setHydrated] = useState(false);
   const [stats, setStats] = useState(null);
   const [online, setOnline] = useState(false);
+  // undefined=校验 token 中；null=未登录（渲染 AuthPanel）；对象=已登录用户
+  const [user, setUser] = useState(undefined);
 
   const toastTimer = useRef(null);
   const bootRef = useRef(false);
@@ -43,38 +48,99 @@ export default function MedicalAssistant() {
     toastTimer.current = setTimeout(() => setToast(null), action ? 6000 : 3200);
   }, []);
 
-  // 首次挂载：从后端 SQLite 加载历史（按 client_id 隔离）+ 拉取知识库统计。
-  // 复用已有空会话，无则新建一个。bootRef 防 StrictMode 双调用重复建会话。
+  // 旧：首次挂载直接按 Cookie 身份加载历史（无登录概念）；现拆为"身份校验"+"登录后加载"两步。
+  // useEffect(() => {
+  //   if (!bootRef.current) {
+  //     bootRef.current = true;
+  //     (async () => {
+  //       try {
+  //         const list = await fetchConversations();
+  //         const nonEmpty = list.filter((c) => c.messages.length > 0);
+  //         let empty = list.find((c) => c.messages.length === 0);
+  //         if (!empty) {
+  //           empty = await createConversation({ title: "新对话", createdAt: Date.now() });
+  //         }
+  //         setConversations([empty, ...nonEmpty]);
+  //         setActiveId(empty.id);
+  //       } catch {
+  //         const fresh = { id: tmpId(), title: "新对话", createdAt: Date.now(), messages: [] };
+  //         setConversations([fresh]);
+  //         setActiveId(fresh.id);
+  //         showToast("无法加载对话历史（后端未启动）");
+  //       } finally {
+  //         setHydrated(true);
+  //       }
+  //     })();
+  //     fetchHealth()
+  //       .then((h) => { setStats(h.stats); setOnline(true); })
+  //       .catch(() => { setStats(FALLBACK_STATS); setOnline(false); });
+  //   }
+  //   return () => {
+  //     if (toastTimer.current) clearTimeout(toastTimer.current);
+  //   };
+  // }, [showToast]);
+
+  // 挂载：有 token 则向 /api/auth/me 校验，无/失效进登录页；健康检查与登录无关，照常拉取。
   useEffect(() => {
-    if (!bootRef.current) {
-      bootRef.current = true;
-      (async () => {
-        try {
-          const list = await fetchConversations();
-          const nonEmpty = list.filter((c) => c.messages.length > 0);
-          let empty = list.find((c) => c.messages.length === 0);
-          if (!empty) {
-            empty = await createConversation({ title: "新对话", createdAt: Date.now() });
-          }
-          setConversations([empty, ...nonEmpty]);
-          setActiveId(empty.id);
-        } catch {
-          const fresh = { id: tmpId(), title: "新对话", createdAt: Date.now(), messages: [] };
-          setConversations([fresh]);
-          setActiveId(fresh.id);
-          showToast("无法加载对话历史（后端未启动）");
-        } finally {
-          setHydrated(true);
-        }
-      })();
-      fetchHealth()
-        .then((h) => { setStats(h.stats); setOnline(true); })
-        .catch(() => { setStats(FALLBACK_STATS); setOnline(false); });
+    if (!getToken()) {
+      setUser(null);
+    } else {
+      fetchMe()
+        .then((u) => setUser(u))
+        .catch(() => setUser(null));
     }
+    fetchHealth()
+      .then((h) => { setStats(h.stats); setOnline(true); })
+      .catch(() => { setStats(FALLBACK_STATS); setOnline(false); });
     return () => {
       if (toastTimer.current) clearTimeout(toastTimer.current);
     };
-  }, [showToast]);
+  }, []);
+
+  // 登录成功后：从后端 SQLite 加载历史（按用户 id 隔离）。
+  // 复用已有空会话，无则新建一个。bootRef 防 StrictMode 双调用重复建会话。
+  useEffect(() => {
+    if (!user || bootRef.current) return;
+    bootRef.current = true;
+    (async () => {
+      try {
+        const list = await fetchConversations();
+        const nonEmpty = list.filter((c) => c.messages.length > 0);
+        let empty = list.find((c) => c.messages.length === 0);
+        if (!empty) {
+          empty = await createConversation({ title: "新对话", createdAt: Date.now() });
+        }
+        setConversations([empty, ...nonEmpty]);
+        setActiveId(empty.id);
+      } catch {
+        const fresh = { id: tmpId(), title: "新对话", createdAt: Date.now(), messages: [] };
+        setConversations([fresh]);
+        setActiveId(fresh.id);
+        showToast("无法加载对话历史（后端未启动）");
+      } finally {
+        setHydrated(true);
+      }
+    })();
+  }, [user, showToast]);
+
+  const resetToLogin = useCallback(() => {
+    setUser(null);
+    bootRef.current = false;
+    setHydrated(false);
+    setConversations([]);
+    setActiveId(null);
+  }, []);
+
+  // 任一请求 401（token 过期/失效）：lib 层已清 token，这里退回登录页
+  useEffect(() => {
+    window.addEventListener("medical:unauthorized", resetToLogin);
+    return () => window.removeEventListener("medical:unauthorized", resetToLogin);
+  }, [resetToLogin]);
+
+  const logout = useCallback(() => {
+    authLogout();
+    resetToLogin();
+  }, [resetToLogin]);
 
   const active = conversations.find((c) => c.id === activeId) || null;
 
@@ -289,6 +355,12 @@ export default function MedicalAssistant() {
 
   const openEntry = useCallback((entry) => setDrawer(entry), []);
 
+  if (user === undefined) {
+    return <div className="hr-app hr-boot"><div className="boot-spinner" /><span>正在加载医疗助手…</span></div>;
+  }
+  if (user === null) {
+    return <AuthPanel onAuthed={setUser} />;
+  }
   if (!hydrated) {
     return <div className="hr-app hr-boot"><div className="boot-spinner" /><span>正在加载医疗助手…</span></div>;
   }
@@ -320,6 +392,13 @@ export default function MedicalAssistant() {
           <div className="flex flex-none items-center gap-2.5">
             <span className="status-pill"><i className="pulse" /> {online ? `知识库在线 · ${total.toLocaleString()} 条问答` : "知识库离线 · 展示样例数据"}</span>
             <span className="env-badge">演示环境</span>
+            <span className="max-[640px]:hidden text-xs font-semibold text-fg-soft">{user.username}</span>
+            <button
+              className="rounded-lg border border-line px-3 py-1.5 text-xs text-fg-soft transition-colors hover:border-fg-muted hover:text-fg"
+              onClick={logout}
+            >
+              退出
+            </button>
           </div>
         </header>
 

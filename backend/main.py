@@ -11,10 +11,12 @@ import os
 import sys
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import jwt
 from dotenv import load_dotenv
-from fastapi import Body, Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -33,6 +35,13 @@ sys.path.insert(0, str(RAG_DIR))
 # 让 db 在 `uvicorn backend.main:app` 与 `fastapi dev backend/main.py` 两种启动方式下都可导入
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import db  # noqa: E402
+
+# JWT 认证配置：密钥来自 backend/.env（见 backend/.env.example）
+JWT_SECRET = os.environ.get("JWT_SECRET")
+if not JWT_SECRET:
+    raise RuntimeError("缺少 JWT_SECRET：请在 backend/.env 配置（参考 backend/.env.example）")
+JWT_ALGORITHM = "HS256"
+JWT_TTL = timedelta(days=7)
 
 logger = logging.getLogger("medical-backend")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -69,23 +78,53 @@ class MessagePatch(BaseModel):
     feedback: str | None = None
 
 
+class AuthIn(BaseModel):
+    username: str
+    password: str
+
+
 def uid() -> str:
     """持久化 id（会话/消息）统一由后端生成，前端不再自带 id。"""
     return str(uuid.uuid4())
 
 
-def client_id(request: Request, response: Response) -> str:
-    """从 httponly Cookie 读取浏览器身份；首次访问由后端生成并下发，30 天有效。"""
-    cid = request.cookies.get("client_id")
-    if not cid:
-        # 旧：cid = uuid.uuid4().hex（32位无连字符）；统一为规范36位，与 uid() 主键风格一致
-        cid = str(uuid.uuid4())
-        response.set_cookie(
-            "client_id", cid,
-            httponly=True, samesite="lax",
-            max_age=60 * 60 * 24 * 30,
-        )
-    return cid
+# 旧：Cookie 匿名身份（client_id httponly Cookie，30 天）；现改 JWT 用户登录认证。
+# def client_id(request: Request, response: Response) -> str:
+#     """从 httponly Cookie 读取浏览器身份；首次访问由后端生成并下发，30 天有效。"""
+#     cid = request.cookies.get("client_id")
+#     if not cid:
+#         # 旧：cid = uuid.uuid4().hex（32位无连字符）；统一为规范36位，与 uid() 主键风格一致
+#         cid = str(uuid.uuid4())
+#         response.set_cookie(
+#             "client_id", cid,
+#             httponly=True, samesite="lax",
+#             max_age=60 * 60 * 24 * 30,
+#         )
+#     return cid
+
+
+def _make_token(user_id: str) -> str:
+    now = datetime.now(timezone.utc)
+    return jwt.encode(
+        {"sub": user_id, "iat": now, "exp": now + JWT_TTL},
+        JWT_SECRET, algorithm=JWT_ALGORITHM,
+    )
+
+
+def current_user(authorization: str | None = Header(default=None)) -> dict:
+    """从 Authorization: Bearer <JWT> 解析用户身份；缺失/无效/过期一律 401。"""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="未登录")
+    try:
+        payload = jwt.decode(authorization[7:], JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="登录已过期，请重新登录")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="登录凭证无效")
+    user = db.get_user_by_id(payload.get("sub", ""))
+    if not user:
+        raise HTTPException(status_code=401, detail="用户不存在")
+    return user
 
 
 @asynccontextmanager
@@ -144,8 +183,37 @@ def health():
     return {"ok": True, "stats": app.state.stats}
 
 
+@app.post("/api/auth/register")
+def register(body: AuthIn):
+    username = body.username.strip()
+    if not 2 <= len(username) <= 32:
+        raise HTTPException(status_code=400, detail="用户名需为 2-32 个字符")
+    if len(body.password) < 6:
+        raise HTTPException(status_code=400, detail="密码至少 6 位")
+    user = db.create_user(username, body.password)
+    if not user:
+        raise HTTPException(status_code=409, detail="用户名已存在")
+    return {"token": _make_token(user["id"]), "user": user}
+
+
+@app.post("/api/auth/login")
+def login(body: AuthIn):
+    user = db.get_user_by_name(body.username.strip())
+    if not user or not db.verify_password(user, body.password):
+        raise HTTPException(status_code=401, detail="用户名或密码错误")
+    return {
+        "token": _make_token(user["id"]),
+        "user": {"id": user["id"], "username": user["username"]},
+    }
+
+
+@app.get("/api/auth/me")
+def me(user: dict = Depends(current_user)):
+    return user
+
+
 @app.post("/api/ask")
-def ask(body: AskIn):
+def ask(body: AskIn, _user: dict = Depends(current_user)):
     question = body.question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="question 不能为空")
@@ -166,7 +234,7 @@ def ask(body: AskIn):
 
 
 @app.post("/api/ask/stream")
-def ask_stream(body: AskIn):
+def ask_stream(body: AskIn, _user: dict = Depends(current_user)):
     """SSE 流式问答：meta(溯源/科室/疾病) -> delta(回答文本) -> done"""
     question = body.question.strip()
     if not question:
@@ -196,44 +264,45 @@ def ask_stream(body: AskIn):
 
 
 @app.get("/api/conversations")
-def get_conversations(cid: str = Depends(client_id)):
-    return db.list_conversations(cid)
+def get_conversations(user: dict = Depends(current_user)):
+    # 旧：cid: str = Depends(client_id)（Cookie 匿名身份）
+    return db.list_conversations(user["id"])
 
 
 @app.post("/api/conversations")
-def create_conversation(body: ConversationIn, cid: str = Depends(client_id)):
+def create_conversation(body: ConversationIn, user: dict = Depends(current_user)):
     conv_id = uid()
     # 撤销删除会带回旧消息，其 id 同样由后端重新生成
     messages = [{**m, "id": uid()} for m in body.messages] if body.messages else None
-    return db.create_conversation(cid, conv_id, body.title, body.createdAt, messages)
+    return db.create_conversation(user["id"], conv_id, body.title, body.createdAt, messages)
 
 
 @app.patch("/api/conversations/{conv_id}")
-def patch_conversation(conv_id: str, body: ConversationPatch, cid: str = Depends(client_id)):
-    if not db.update_conversation(cid, conv_id, body.title):
+def patch_conversation(conv_id: str, body: ConversationPatch, user: dict = Depends(current_user)):
+    if not db.update_conversation(user["id"], conv_id, body.title):
         raise HTTPException(status_code=404, detail="会话不存在")
     return {"ok": True}
 
 
 @app.delete("/api/conversations/{conv_id}")
-def remove_conversation(conv_id: str, cid: str = Depends(client_id)):
-    if not db.delete_conversation(cid, conv_id):
+def remove_conversation(conv_id: str, user: dict = Depends(current_user)):
+    if not db.delete_conversation(user["id"], conv_id):
         raise HTTPException(status_code=404, detail="会话不存在")
     return {"ok": True}
 
 
 @app.post("/api/conversations/{conv_id}/messages")
-def add_message(conv_id: str, message: dict = Body(...), cid: str = Depends(client_id)):
+def add_message(conv_id: str, message: dict = Body(...), user: dict = Depends(current_user)):
     if not message.get("role"):
         raise HTTPException(status_code=400, detail="message 需含 role")
     message["id"] = uid()
-    if not db.append_message(cid, conv_id, message):
+    if not db.append_message(user["id"], conv_id, message):
         raise HTTPException(status_code=404, detail="会话不存在")
     return message
 
 
 @app.patch("/api/messages/{msg_id}")
-def patch_message(msg_id: str, body: MessagePatch, cid: str = Depends(client_id)):
-    if not db.update_message_feedback(cid, msg_id, body.feedback):
+def patch_message(msg_id: str, body: MessagePatch, user: dict = Depends(current_user)):
+    if not db.update_message_feedback(user["id"], msg_id, body.feedback):
         raise HTTPException(status_code=404, detail="消息不存在")
     return {"ok": True}
