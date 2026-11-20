@@ -253,6 +253,8 @@ export default function MedicalAssistant() {
         related_diseases: meta.related_diseases || [],
         note: meta.disclaimer || "",
         route: meta.route,
+        // 多轮指代消解后的查询（与原问不同才展示"已理解为"）
+        rewrittenQuery: meta.rewritten_query && meta.rewritten_query !== text ? meta.rewritten_query : "",
       };
       setConversations((prev) => prev.map((c) => (
         c.id === convId ? { ...c, messages: [...c.messages, botMsg] } : c
@@ -292,6 +294,7 @@ export default function MedicalAssistant() {
     };
 
     askBackendStream(text, {
+      conversationId: convId,
       onMeta: (meta) => { metaSeen = true; setPending(false); insertBot(meta); },
       onDelta: (_d, full) => patchMsg(convId, botId, (m) => ({ ...m, text: full })),
     })

@@ -121,29 +121,33 @@ class MedicalSystem:
                 break
         return out
 
-    def _retrieve(self, question: str):
-        """路由+重写+检索，返回 (route, chunks)；越界/无命中时 chunks 为空"""
+    def _retrieve(self, question: str, history=None):
+        """路由+重写+检索，返回 (route, chunks, rewritten)；越界/无命中时 chunks 为空"""
         route = self.dialogue.query_router(question)
         if route == 'out_of_scope':
-            return route, []
-        rewritten = self.dialogue.query_rewrite(question)
+            return route, [], question
+        # 旧：rewritten = self.dialogue.query_rewrite(question)（单轮重写）
+        rewritten = (self.dialogue.rewrite_with_history(question, history)
+                     if history else self.dialogue.query_rewrite(question))
         chunks = self.retrieval.hybrid_search(rewritten, top_k=self.config.top_k)
-        return route, chunks
+        return route, chunks, rewritten
 
-    def ask_with_sources(self, question: str) -> dict:
-        """后端 API 用：返回 {route, answer, sources, department, related_diseases}"""
+    def ask_with_sources(self, question: str, history=None) -> dict:
+        """后端 API 用：返回 {route, answer, sources, department, related_diseases, rewritten_query}"""
         if not all([self.retrieval, self.generation, self.dialogue]):
             raise ValueError("请先构建知识库")
 
-        route, chunks = self._retrieve(question)
+        # 旧：route, chunks = self._retrieve(question)（单轮）
+        route, chunks, rewritten = self._retrieve(question, history)
         if route == 'out_of_scope':
             return {"route": route, "answer": OUT_OF_SCOPE_ANSWER, "sources": [],
-                    "department": "", "related_diseases": []}
+                    "department": "", "related_diseases": [], "rewritten_query": question}
         if not chunks:
             return {"route": "no_match", "answer": NO_MATCH_ANSWER, "sources": [],
-                    "department": "", "related_diseases": []}
+                    "department": "", "related_diseases": [], "rewritten_query": rewritten}
 
-        answer = self.generation.generate_answer(question, chunks)
+        # 旧：answer = self.generation.generate_answer(question, chunks)（单轮）
+        answer = self.generation.generate_answer(question, chunks, history)
         sources = [{
             "id": c.metadata.get("chunk_id", ""),
             "question": c.page_content,
@@ -158,20 +162,24 @@ class MedicalSystem:
             "sources": sources,
             "department": self._vote_department(chunks),
             "related_diseases": self._collect_diseases(chunks),
+            "rewritten_query": rewritten,
         }
 
-    def ask_stream(self, question: str):
+    def ask_stream(self, question: str, history=None):
         """SSE 用：先 yield meta(dict)，再逐段 yield 回答文本(str)"""
         if not all([self.retrieval, self.generation, self.dialogue]):
             raise ValueError("请先构建知识库")
 
-        route, chunks = self._retrieve(question)
+        # 旧：route, chunks = self._retrieve(question)（单轮）
+        route, chunks, rewritten = self._retrieve(question, history)
         if route == 'out_of_scope':
-            yield {"route": route, "sources": [], "department": "", "related_diseases": []}
+            yield {"route": route, "sources": [], "department": "", "related_diseases": [],
+                   "rewritten_query": question}
             yield OUT_OF_SCOPE_ANSWER
             return
         if not chunks:
-            yield {"route": "no_match", "sources": [], "department": "", "related_diseases": []}
+            yield {"route": "no_match", "sources": [], "department": "", "related_diseases": [],
+                   "rewritten_query": rewritten}
             yield NO_MATCH_ANSWER
             return
 
@@ -188,8 +196,10 @@ class MedicalSystem:
             "sources": sources,
             "department": self._vote_department(chunks),
             "related_diseases": self._collect_diseases(chunks),
+            "rewritten_query": rewritten,
         }
-        yield from self.generation.generate_answer_stream(question, chunks)
+        # 旧：yield from self.generation.generate_answer_stream(question, chunks)（单轮）
+        yield from self.generation.generate_answer_stream(question, chunks, history)
 
     # ------------------------------------------------------------------ #
     def run_interactive(self):

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from ..schemas.ask import AskIn
-from ..services import rag_service
+from ..services import conversation_service, rag_service
 from .deps import current_user
 
 logger = logging.getLogger("medical-backend")
@@ -21,8 +21,11 @@ def ask(body: AskIn, request: Request, _user: dict = Depends(current_user)):
     if not question:
         raise HTTPException(status_code=400, detail="question 不能为空")
     system = rag_service.get_system(request.app)
+    history = (conversation_service.build_history(_user["id"], body.conversation_id, question)
+               if body.conversation_id else [])
     try:
-        result = system.ask_with_sources(question)
+        # 旧：result = system.ask_with_sources(question)（单轮，无历史）
+        result = system.ask_with_sources(question, history=history)
     except Exception as e:  # LLM/检索异常统一转为 500，前端展示错误气泡
         logger.exception("问答失败")
         raise HTTPException(status_code=500, detail=str(e))
@@ -32,6 +35,7 @@ def ask(body: AskIn, request: Request, _user: dict = Depends(current_user)):
         "department": result["department"],
         "related_diseases": result["related_diseases"],
         "route": result["route"],
+        "rewritten_query": result["rewritten_query"],
         "disclaimer": rag_service.DISCLAIMER,
     }
 
@@ -43,13 +47,16 @@ def ask_stream(body: AskIn, request: Request, _user: dict = Depends(current_user
     if not question:
         raise HTTPException(status_code=400, detail="question 不能为空")
     system = rag_service.get_system(request.app)
+    history = (conversation_service.build_history(_user["id"], body.conversation_id, question)
+               if body.conversation_id else [])
 
     def sse(event: str, data) -> str:
         return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
     def gen():
         try:
-            for piece in system.ask_stream(question):
+            # 旧：for piece in system.ask_stream(question)（单轮，无历史）
+            for piece in system.ask_stream(question, history=history):
                 if isinstance(piece, dict):
                     yield sse("meta", {**piece, "disclaimer": rag_service.DISCLAIMER})
                 else:

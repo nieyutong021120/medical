@@ -66,6 +66,22 @@ class DialogueModule:
         return 'medical_qa'
 
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def _clean_rewrite(response: str, query: str) -> str:
+        """清洗重写输出：模型偶发附带"**判断说明**：…"等解释文字，会污染检索与展示。"""
+        text = response.strip().split("\n")[0].strip()
+        for marker in ("判断说明", "说明：", "解释：", "理由："):
+            idx = text.find(marker)
+            if idx > 0:
+                text = text[:idx].strip()
+        text = text.strip("*").strip()
+        # 空/过短/异常冗长（重写不应远超原问）一律回退原查询
+        if not text or len(text) < 2 or len(text) > max(100, len(query) * 3):
+            logger.warning(f"重写输出异常('{response[:80]}…')，回退原查询: '{query}'")
+            return query
+        return text
+
+    # ------------------------------------------------------------------ #
     def query_rewrite(self, query: str) -> str:
         """口语化症状描述重写为规范医学表述，提升与库中患者提问的匹配度"""
         prompt = PromptTemplate(
@@ -85,15 +101,44 @@ class DialogueModule:
         )
         chain = {"query": RunnablePassthrough()} | prompt | self.llm | StrOutputParser()
         response = chain.invoke(query).strip()
-        # 模型偶发返回空串会导致空查询检索 —— 回退原查询（沿用旧模块的防御）
-        if not response or len(response) < 2:
-            logger.warning(f"查询重写返回空/异常('{response}')，回退原查询: '{query}'")
-            return query
+        # 旧：仅防空串；现统一清洗（模型偶发附带"判断说明"等解释文字，污染检索与展示）
+        # if not response or len(response) < 2:
+        #     logger.warning(f"查询重写返回空/异常('{response}')，回退原查询: '{query}'")
+        #     return query
+        response = self._clean_rewrite(response, query)
         if response != query:
             logger.info(f"查询已重写: '{query}' -> '{response}'")
         return response
 
     # ------------------------------------------------------------------ #
-    def rewrite_with_history(self, query: str, history: List[str]) -> str:
-        """[二期预留] 结合多轮对话历史做指代消解改写"""
-        return query
+    def rewrite_with_history(self, query: str, history: List[dict]) -> str:
+        """多轮指代消解改写：结合历史把当前问题补全为自包含查询（替代单轮 query_rewrite，不额外增加调用）"""
+        # 旧：[二期预留] 空实现 return query
+        lines = [
+            ("用户" if m["role"] == "user" else "助手") + ": " + m["text"]
+            for m in history
+        ]
+        prompt = PromptTemplate(
+            template="""
+你是医疗健康领域的查询分析助手。请结合对话历史，把用户当前问题改写为独立、完整、适合检索的查询。
+
+对话历史:
+{history}
+
+当前问题: {query}
+
+规则：
+1. 当前问题含指代（它/这个病/那种药等）或省略主语时，依据历史补全。如历史在谈糖尿病，"它有什么并发症？"→"糖尿病有什么并发症？"
+2. 当前问题已自包含时直接返回原问题；不要添加用户未提及的症状或疾病
+3. 使用规范医学词汇、保持简洁
+
+请输出最终查询:""",
+            input_variables=["history", "query"]
+        )
+        chain = prompt | self.llm | StrOutputParser()
+        response = chain.invoke({"history": "\n".join(lines), "query": query}).strip()
+        # 与 query_rewrite 相同的防御：清洗 + 空/异常回退原查询
+        response = self._clean_rewrite(response, query)
+        if response != query:
+            logger.info(f"查询已重写(带历史): '{query}' -> '{response}'")
+        return response

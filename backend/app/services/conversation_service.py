@@ -40,3 +40,46 @@ def append_message(user_id: str, conv_id: str, message: dict):
 
 def update_feedback(user_id: str, msg_id: str, feedback) -> bool:
     return db.update_message_feedback(user_id, msg_id, feedback)
+
+
+def build_history(user_id: str, conv_id: str, question: str,
+                  max_turns: int = 4, max_chars: int = 1500) -> list:
+    """取会话近期历史供多轮问答：最近 max_turns 轮、总长 ≤ max_chars，从新到旧整轮装桶。"""
+    conv = db.get_conversation(user_id, conv_id)
+    if not conv:
+        return []
+    msgs = [
+        m for m in conv["messages"]
+        if m["role"] in ("user", "assistant")
+        and m.get("kind") != "error" and (m.get("text") or "").strip()
+    ]
+    # 当前问题可能已由前端先行落库，剔除末尾重复，避免混入"历史"
+    if msgs and msgs[-1]["role"] == "user" and msgs[-1]["text"].strip() == question.strip():
+        msgs.pop()
+    turns = []
+    for m in msgs:
+        text = m["text"].strip()
+        if m["role"] == "user":
+            turns.append({"user": text, "assistant": ""})
+        elif turns:
+            turns[-1]["assistant"] = text
+    kept, total = [], 0
+    for t in reversed(turns[-max_turns:]):
+        cost = len(t["user"]) + len(t["assistant"])
+        if total + cost > max_chars:
+            # 最新一轮本身超预算：user 完整保留，assistant 只留开头
+            if not kept:
+                a = t["assistant"]
+                if len(a) > 600:
+                    a = a[:600] + "…(回答已截断)"
+                kept.append({"user": t["user"], "assistant": a})
+            break
+        kept.append(t)
+        total += cost
+    kept.reverse()
+    history = []
+    for t in kept:
+        history.append({"role": "user", "text": t["user"]})
+        if t["assistant"]:
+            history.append({"role": "assistant", "text": t["assistant"]})
+    return history

@@ -100,6 +100,10 @@ export default function ChatMessage({ msg, onCopy, onFeedback, onOpenSource, onA
             </div>
           )}
 
+          {revealed && msg.rewrittenQuery && (
+            <div className="mb-1.5 text-[12px] text-fg-muted">已理解为：{msg.rewrittenQuery}</div>
+          )}
+
           <p className={"text-[14.5px] [overflow-wrap:anywhere]" + (msg.kind === "rag" ? " [white-space:pre-line]" : "")}>
             {(msg.text || "").slice(0, shown)}
             {(typing && !revealed) || msg.streaming ? <span className="caret" /> : null}

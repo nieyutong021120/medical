@@ -64,10 +64,22 @@ class GenerationModule:
         return divider + divider.join(parts)
 
     # ------------------------------------------------------------------ #
+    def _history_block(self, history) -> str:
+        """多轮历史格式化为 prompt 片段；无历史返回空串（单轮行为不变）"""
+        if not history:
+            return ""
+        lines = [
+            ("用户" if m["role"] == "user" else "助手") + ": " + m["text"]
+            for m in history
+        ]
+        return "近期对话历史（仅供理解上下文，回答仍须依据参考问答）:\n" + "\n".join(lines) + "\n"
+
+    # ------------------------------------------------------------------ #
     def _answer_prompt(self) -> ChatPromptTemplate:
         return ChatPromptTemplate.from_template("""
 你是一位专业、严谨、有同理心的医疗健康助手。请严格依据下方检索到的参考问答回答用户问题。
 
+{history_block}
 用户问题: {question}
 
 检索到的参考问答:
@@ -83,16 +95,20 @@ class GenerationModule:
 
 回答:""")
 
-    def _chain(self, context: str):
+    def _chain(self, context: str, history_block: str = ""):
         return (
-            {"question": RunnablePassthrough(), "context": lambda _: context}
+            # 旧：{"question": RunnablePassthrough(), "context": lambda _: context}（无历史变量）
+            {"question": RunnablePassthrough(), "context": lambda _: context,
+             "history_block": lambda _: history_block}
             | self._answer_prompt() | self.llm | StrOutputParser()
         )
 
-    def generate_answer(self, query: str, chunks: List[Document]) -> str:
+    def generate_answer(self, query: str, chunks: List[Document], history=None) -> str:
         # 旧：answer + _build_citations(chunks) + DISCLAIMER（溯源改为结构化sources由后端返回）
-        return self._chain(self._build_context(chunks)).invoke(query)
+        # 旧：return self._chain(self._build_context(chunks)).invoke(query)（单轮）
+        return self._chain(self._build_context(chunks), self._history_block(history)).invoke(query)
 
-    def generate_answer_stream(self, query: str, chunks: List[Document]):
-        for chunk in self._chain(self._build_context(chunks)).stream(query):
+    def generate_answer_stream(self, query: str, chunks: List[Document], history=None):
+        # 旧：for chunk in self._chain(self._build_context(chunks)).stream(query)（单轮）
+        for chunk in self._chain(self._build_context(chunks), self._history_block(history)).stream(query):
             yield chunk
