@@ -42,26 +42,55 @@ class DialogueModule:
         logger.info("对话LLM初始化完成")
 
     # ------------------------------------------------------------------ #
-    def query_router(self, query: str) -> str:
+    def query_router(self, query: str, history: List[dict] = None) -> str:
         """
-        意图路由：
-          medical_qa   - 症状/疾病/用药/就医/健康科普等医疗健康问题
-          out_of_scope - 与医疗健康无关（闲聊、天气、编程等），兜底防幻觉
+        意图路由（阶段二扩展为三分类）：
+          medical_qa           - 明确的医疗健康问题，走快速路径（重写+检索+生成）
+          complex_or_ambiguous - 复杂/模糊问题（症状笼统、多症状交织、缺关键信息），走 Agent
+          out_of_scope         - 与医疗健康无关（闲聊、天气、编程等），兜底防幻觉
+        history 用于多轮场景：对澄清追问的片段式回答（如"阵发性，早上明显"）需结合历史判断。
         """
+        # 旧：两分类 prompt（medical_qa / out_of_scope），阶段二加入 complex_or_ambiguous
+        # prompt = ChatPromptTemplate.from_template("""
+        # 你是医疗健康助手的意图分类器。请将用户问题归为以下两类之一：
+        #
+        # 1. 'medical_qa' - 医疗健康相关：症状咨询、疾病知识、用药常识、检查解读、就医科室、预防保健、康复护理等。例：最近总是头晕是怎么回事？高血压能吃党参吗？孩子发烧38度怎么办？
+        # 2. 'out_of_scope' - 与医疗健康无关：闲聊、天气、写诗、编程、法律、财务等。例：今天天气如何？帮我写一首诗？
+        #
+        # 请只返回一个词：medical_qa 或 out_of_scope
+        #
+        # 用户问题: {query}
+        #
+        # 分类结果:""")
+        # chain = {"query": RunnablePassthrough()} | prompt | self.llm | StrOutputParser()
+        # result = chain.invoke(query).strip().lower()
+        # if result in ['medical_qa', 'out_of_scope']:
+        #     return result
+        # return 'medical_qa'
+        history_block = ""
+        if history:
+            lines = [
+                ("用户" if m["role"] == "user" else "助手") + ": " + m["text"]
+                for m in history
+            ]
+            history_block = "对话历史（仅供理解当前问题的语境）:\n" + "\n".join(lines) + "\n\n"
         prompt = ChatPromptTemplate.from_template("""
-你是医疗健康助手的意图分类器。请将用户问题归为以下两类之一：
+你是医疗健康助手的意图分类器。请将用户问题归为以下三类之一：
 
-1. 'medical_qa' - 医疗健康相关：症状咨询、疾病知识、用药常识、检查解读、就医科室、预防保健、康复护理等。例：最近总是头晕是怎么回事？高血压能吃党参吗？孩子发烧38度怎么办？
-2. 'out_of_scope' - 与医疗健康无关：闲聊、天气、写诗、编程、法律、财务等。例：今天天气如何？帮我写一首诗？
+1. 'medical_qa' - 明确的医疗健康问题：含具体疾病/症状/药品名，意图清晰，可直接检索作答。例：糖尿病有哪些症状？高血压能吃党参吗？痔疮手术后要注意什么？
+2. 'complex_or_ambiguous' - 复杂或信息不足的医疗问题：症状描述笼统（如"头晕""不舒服"且无部位/诱因/时长）、多个症状交织、或缺少关键信息需要追问澄清。例：我最近头晕该怎么办？肚子疼还恶心头晕是怎么回事？
+3. 'out_of_scope' - 与医疗健康无关：闲聊、天气、写诗、编程、法律、财务等。例：今天天气如何？帮我写一首诗？
 
-请只返回一个词：medical_qa 或 out_of_scope
+注意：若当前问题是对助手澄清追问的回答（结合对话历史判断），应归为 complex_or_ambiguous。
 
-用户问题: {query}
+{history_block}用户问题: {query}
+
+请只返回一个词：medical_qa、complex_or_ambiguous 或 out_of_scope
 
 分类结果:""")
-        chain = {"query": RunnablePassthrough()} | prompt | self.llm | StrOutputParser()
-        result = chain.invoke(query).strip().lower()
-        if result in ['medical_qa', 'out_of_scope']:
+        chain = prompt | self.llm | StrOutputParser()
+        result = chain.invoke({"query": query, "history_block": history_block}).strip().lower()
+        if result in ['medical_qa', 'complex_or_ambiguous', 'out_of_scope']:
             return result
         return 'medical_qa'
 

@@ -7,6 +7,7 @@
 ## 功能特性
 
 - **智能医疗问答**：SSE 真流式输出；先检索后作答，回答基于知识库真实医生问答生成；支持多轮对话（历史指代消解改写 + 上下文衔接）
+- **工具调用 Agent（混合路由）**：意图三分类，明确问题走快速路径；复杂/模糊问题由 Agent 决策——检索知识库（`search_medical_qa`）或反问澄清（`ask_clarification`），最多 2 轮决策，医疗回答始终基于检索结果生成；流式期间展示工具状态提示（不落库）
 - **质量分层检索**：FAISS 向量（bge-small-zh-v1.5，仅嵌入问题）+ jieba-BM25（问题+答案）→ RRF 融合 → 按数据集 score(4/5) 加权
 - **智能导诊**：对 top-k 检索结果按 rrf 分数加权投票，给出建议科室（16 个科室标签）
 - **相关疾病提示**：聚合检索结果的 related_diseases 字段，去重取前 6
@@ -103,7 +104,7 @@ python medical_rag/scripts/build_index.py   # 3 用过滤后的数据重建索�
 | `POST /api/auth/login` | 登录 `{username, password}` → `{token, user}` |
 | `GET /api/auth/me` | 校验 token，返回当前用户（需 `Authorization: Bearer`） |
 | `POST /api/ask` | 一次性问答 `{question, conversation_id?}` → `{answer, sources, department, related_diseases, route, rewritten_query, disclaimer}`（需登录；带 conversation_id 时加载本人会话历史做多轮） |
-| `POST /api/ask/stream` | SSE 流式：`meta`（溯源/科室/疾病/改写查询/免责声明）→ `delta`（文本增量）→ `done` / `error`（需登录；多轮同上） |
+| `POST /api/ask/stream` | SSE 流式：`tool`（Agent 工具轨迹，仅复杂问题出现）→ `meta`（溯源/科室/疾病/改写查询/免责声明）→ `delta`（文本增量）→ `done` / `error`（需登录；多轮同上；澄清追问时 `meta.route="clarify"`、无溯源） |
 | `/api/conversations*`、`/api/messages*` | 会话与消息 CRUD（按 JWT 用户 id 隔离，id 由后端生成；需登录） |
 
 ## 项目结构

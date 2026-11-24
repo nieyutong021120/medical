@@ -27,6 +27,10 @@ class MedicalConfig:
     temperature: float = 1
     max_tokens: int = 2048
 
+    # Agent 配置（阶段二：复杂/模糊问题走工具调用 Agent，简单问题保持快速路径）
+    agent_enabled: bool = True       # 关闭后 complex_or_ambiguous 也走快速路径
+    agent_max_iterations: int = 2    # Agent 最多决策轮数（每轮 1 次 LLM 调用，控制 RPM 消耗）
+
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> 'MedicalConfig':
         return cls(**config_dict)

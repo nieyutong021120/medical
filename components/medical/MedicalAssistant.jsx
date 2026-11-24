@@ -31,6 +31,8 @@ export default function MedicalAssistant() {
   const [activeId, setActiveId] = useState(null);
   const [view, setView] = useState("chat");
   const [pending, setPending] = useState(false);
+  // 阶段二：Agent 工具轨迹的 transient 状态提示（仅流式期间展示，不落库）
+  const [toolStatus, setToolStatus] = useState("");
   const [drawer, setDrawer] = useState(null);
   const [toast, setToast] = useState(null);
   const [sideOpen, setSideOpen] = useState(false);
@@ -295,7 +297,13 @@ export default function MedicalAssistant() {
 
     askBackendStream(text, {
       conversationId: convId,
-      onMeta: (meta) => { metaSeen = true; setPending(false); insertBot(meta); },
+      // Agent 工具事件 → 状态行文案（transient，meta 到达即清除，不写入消息/数据库）
+      onTool: (ev) => setToolStatus(
+        ev.name === "search_medical_qa" ? "正在检索知识库…"
+          : ev.name === "ask_clarification" ? "正在整理澄清问题…"
+            : "正在分析问题…"
+      ),
+      onMeta: (meta) => { metaSeen = true; setPending(false); setToolStatus(""); insertBot(meta); },
       onDelta: (_d, full) => patchMsg(convId, botId, (m) => ({ ...m, text: full })),
     })
       .then((result) => finishBot(result.answer || ""))
@@ -313,7 +321,7 @@ export default function MedicalAssistant() {
         // }
         failBot(err);
       })
-      .finally(() => setPending(false));
+      .finally(() => { setPending(false); setToolStatus(""); });
   }, [activeId, pending, conversations, showToast, swapMsgId, patchMsg]);
 
   const markRevealed = useCallback((msgId) => {
@@ -420,6 +428,7 @@ export default function MedicalAssistant() {
           <ChatPanel
             messages={active ? active.messages : []}
             pending={pending}
+            toolStatus={toolStatus}
             stats={stats}
             onSend={send}
             onCopy={copyMessage}

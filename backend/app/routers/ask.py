@@ -42,7 +42,7 @@ def ask(body: AskIn, request: Request, _user: dict = Depends(current_user)):
 
 @router.post("/ask/stream")
 def ask_stream(body: AskIn, request: Request, _user: dict = Depends(current_user)):
-    """SSE 流式问答：meta(溯源/科室/疾病) -> delta(回答文本) -> done"""
+    """SSE 流式问答：[tool(Agent工具轨迹,可选)] -> meta(溯源/科室/疾病) -> delta(回答文本) -> done"""
     question = body.question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="question 不能为空")
@@ -58,7 +58,13 @@ def ask_stream(body: AskIn, request: Request, _user: dict = Depends(current_user
             # 旧：for piece in system.ask_stream(question)（单轮，无历史）
             for piece in system.ask_stream(question, history=history):
                 if isinstance(piece, dict):
-                    yield sse("meta", {**piece, "disclaimer": rag_service.DISCLAIMER})
+                    # 旧：所有 dict 一律按 meta 发送；阶段二引擎可 yield {"_event":"tool",…}
+                    # yield sse("meta", {**piece, "disclaimer": rag_service.DISCLAIMER})
+                    event = piece.pop("_event", "meta")
+                    if event == "meta":
+                        yield sse("meta", {**piece, "disclaimer": rag_service.DISCLAIMER})
+                    else:
+                        yield sse(event, piece)
                 else:
                     yield sse("delta", {"text": piece})
             yield sse("done", {})

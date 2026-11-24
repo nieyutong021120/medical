@@ -63,7 +63,7 @@ function Welcome({ onAsk, stats }) {
 }
 
 export default function ChatPanel({
-  messages, pending, stats, onSend, onCopy, onFeedback, onOpenSource, onAsk, onRevealed,
+  messages, pending, toolStatus, stats, onSend, onCopy, onFeedback, onOpenSource, onAsk, onRevealed,
 }) {
   const scrollRef = useRef(null);
   const taRef = useRef(null);
@@ -114,7 +114,8 @@ export default function ChatPanel({
               <div className="flex gap-3">
                 <div className="bot-avatar"><Icon.bot /></div>
                 <div className="bubble-bot typing">
-                  <span className="text-[13px] text-fg-muted">正在检索医疗知识库</span>
+                  {/* 阶段二：Agent 工具事件驱动的 transient 状态文案，无事件时用默认提示 */}
+                  <span className="text-[13px] text-fg-muted">{toolStatus || "正在检索医疗知识库"}</span>
                   <span className="dots"><i /><i /><i /></span>
                 </div>
               </div>
