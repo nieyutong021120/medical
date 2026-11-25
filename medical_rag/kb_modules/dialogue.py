@@ -98,6 +98,7 @@ class DialogueModule:
 3. 'out_of_scope' - 与医疗健康无关：闲聊、天气、写诗、编程、法律、财务等。例：今天天气如何？帮我写一首诗？
 
 注意：若当前问题是对助手澄清追问的回答（结合对话历史判断），应归为 complex_or_ambiguous。
+注意：若一句话同时包含身体不适/医疗诉求和其他请求（如问天气、写东西），优先按医疗意图分类（medical_qa 或 complex_or_ambiguous），医疗安全优先；仅当整句的核心任务是写作/翻译/法律/财务等且不含求助症状时，才归 out_of_scope。
 
 {history_block}用户问题: {query}
 
