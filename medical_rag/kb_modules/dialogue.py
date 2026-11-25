@@ -11,7 +11,9 @@ import logging
 from typing import List
 
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
-from langchain_community.chat_models.moonshot import MoonshotChat
+# 旧：Moonshot 官方 SDK 封装；现统一改用 ChatOpenAI 指向 OpenAI 兼容端点
+# from langchain_community.chat_models.moonshot import MoonshotChat
+from langchain_openai import ChatOpenAI
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 
@@ -21,7 +23,8 @@ logger = logging.getLogger(__name__)
 class DialogueModule:
     """对话理解模块 - 意图路由与查询重写"""
 
-    def __init__(self, model_name: str = "kimi-k3", temperature: float = 0.2):
+    # 旧：def __init__(self, model_name: str = "kimi-k3", temperature: float = 0.2):
+    def __init__(self, model_name: str = "glm-5.3-flash", temperature: float = 0.2):
         self.model_name = model_name
         self.temperature = temperature
         self.llm = None
@@ -29,15 +32,28 @@ class DialogueModule:
 
     def setup_llm(self):
         logger.info(f"正在初始化对话LLM: {self.model_name}")
-        api_key = os.getenv("MOONSHOT_API_KEY")
+        # 旧：Moonshot 官方端点 + MOONSHOT_API_KEY；现换本地 OpenAI 兼容端点，
+        # API_KEY / API_BASE_URL 来自 medical_rag/.env（后端 config.py 以 override=True 加载）
+        # api_key = os.getenv("MOONSHOT_API_KEY")
+        # if not api_key:
+        #     raise ValueError("请设置 MOONSHOT_API_KEY 环境变量")
+        # self.llm = MoonshotChat(
+        #     model=self.model_name,
+        #     temperature=self.temperature,
+        #     max_tokens=512,
+        #     max_retries=5,
+        #     moonshot_api_key=api_key,
+        # )
+        api_key = os.getenv("API_KEY")
         if not api_key:
-            raise ValueError("请设置 MOONSHOT_API_KEY 环境变量")
-        self.llm = MoonshotChat(
+            raise ValueError("请设置 API_KEY 环境变量")
+        self.llm = ChatOpenAI(
             model=self.model_name,
+            base_url=os.getenv("API_BASE_URL", "https://api.llm.ustc.edu.cn/v1"),
+            api_key=api_key,
             temperature=self.temperature,
             max_tokens=512,
             max_retries=5,
-            moonshot_api_key=api_key,
         )
         logger.info("对话LLM初始化完成")
 

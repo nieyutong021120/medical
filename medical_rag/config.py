@@ -17,14 +17,14 @@ class MedicalConfig:
 
     # 模型配置（沿用现有项目）
     embedding_model: str = "BAAI/bge-small-zh-v1.5"
-    llm_model: str = "kimi-k3"
+    llm_model: str = "deepseek-v4-flash-ascend1"
 
     # 检索配置
     top_k: int = 5          # 最终返回的参考QA数量
     retriever_k: int = 10   # 单路(向量/BM25)召回候选数，供RRF融合
 
     # 生成配置（沿用现有项目）
-    temperature: float = 1
+    temperature: float = 0.2
     max_tokens: int = 2048
 
     # Agent 配置（阶段二：复杂/模糊问题走工具调用 Agent，简单问题保持快速路径）

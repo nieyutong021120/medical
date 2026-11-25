@@ -2,7 +2,7 @@
 
 - 测试集：eval_routing_cases.jsonl（60 条人工标注，三类各 20，含边界/多轮历史/追问回答/伪装越界难例）
 - 指标：总准确率、每类 precision/recall/F1、3x3 混淆矩阵、按难例标签分组准确率
-- 限速：Moonshot RPM=3，默认每条间隔 21s（60 条约 21 分钟）
+- 限速：旧 Moonshot RPM=3 默认每条间隔 21s；现本地 OpenAI 兼容端点可用 --interval 调小（如 1）
 - 断点续跑：逐条写入 *_progress.jsonl，--resume 跳过已完成 id
 - 数据集体检：--check 只校验测试集格式与配比，不调 LLM、不需要 API key
 
@@ -114,7 +114,7 @@ def main():
     ap = argparse.ArgumentParser(description="意图路由独立评测")
     ap.add_argument("--cases", default=str(SCRIPTS_DIR / "eval_routing_cases.jsonl"))
     ap.add_argument("--out", default=str(SCRIPTS_DIR / "eval_routing_results.json"))
-    ap.add_argument("--interval", type=float, default=21.0, help="每次调用间隔秒数（RPM=3 → ≥20s）")
+    ap.add_argument("--interval", type=float, default=21.0, help="每次调用间隔秒数（旧 Moonshot RPM=3 需 ≥20s；本地端点可调小）")
     ap.add_argument("--limit", type=int, default=0, help="只跑前 N 条（冒烟测试）")
     ap.add_argument("--resume", action="store_true", help="跳过 progress 文件中已完成的 id")
     ap.add_argument("--check", action="store_true", help="只校验测试集，不调 LLM")

@@ -1,14 +1,14 @@
 """
 Agent 模块 - 复杂/模糊问题的工具调用循环（阶段二新增）
 
-设计要点（受 Moonshot RPM=3 约束）：
+设计要点（旧：受 Moonshot RPM=3 约束；现换本地 OpenAI 兼容端点，限速放宽，轮数预算保留）：
 - 混合路由：仅 complex_or_ambiguous 问题进入 Agent；明确问题保持快速路径。
 - 工具：search_medical_qa（包装混合检索，返回压缩QA摘要）+ ask_clarification（终止型追问）。
 - 最多 max_iterations 轮决策（每轮 1 次 LLM 调用）；医疗回答永远交给生成模块基于检索
   结果产出，Agent 自身不自由生成医学内容（防幻觉）。
 - 无效参数 / 检索为空 / 模型不调用工具 → 回退快速路径；轮数用尽但有检索结果 → 强制生成。
-- LLM 用 ChatOpenAI 指向 Moonshot OpenAI 兼容端点（MoonshotChat.bind_tools 是基类
-  默认实现，不可用）。
+- LLM 用 ChatOpenAI 指向 OpenAI 兼容端点（API_BASE_URL，默认 https://api.llm.ustc.edu.cn/v1；
+  旧：指向 Moonshot 端点，因 MoonshotChat.bind_tools 是基类默认实现不可用）。
 - run() 是生成器：途中 yield {"_event":"tool",...} 供 SSE 展示工具轨迹，
   最后 yield {"_event":"agent_result", action: answer|clarify|fallback, ...}。
 """
@@ -40,20 +40,34 @@ SYSTEM_PROMPT = """你是医疗健康助手的决策核心，负责处理复杂�
 class AgentModule:
     """工具调用 Agent：检索 / 澄清追问，产出 chunks 或澄清问题"""
 
-    def __init__(self, retrieval, model_name: str = "kimi-k3", temperature: float = 1,
+    # 旧：def __init__(self, retrieval, model_name: str = "kimi-k3", temperature: float = 1,
+    def __init__(self, retrieval, model_name: str = "glm-5.3-flash", temperature: float = 0.2,
                  max_iterations: int = 2, top_k: int = 5):
         self.retrieval = retrieval
         self.max_iterations = max_iterations
         self.top_k = top_k
-        api_key = os.getenv("MOONSHOT_API_KEY")
+        # 旧：Moonshot 官方端点 + MOONSHOT_API_KEY；现换本地 OpenAI 兼容端点，
+        # API_KEY / API_BASE_URL 来自 medical_rag/.env（后端 config.py 以 override=True 加载）
+        # api_key = os.getenv("MOONSHOT_API_KEY")
+        # if not api_key:
+        #     raise ValueError("请设置 MOONSHOT_API_KEY 环境变量")
+        api_key = os.getenv("API_KEY")
         if not api_key:
-            raise ValueError("请设置 MOONSHOT_API_KEY 环境变量")
+            raise ValueError("请设置 API_KEY 环境变量")
         logger.info(f"正在初始化Agent LLM: {model_name} (max_iterations={max_iterations})")
+        # 旧：self.llm = ChatOpenAI(
+        # 旧：    model=model_name,
+        # 旧：    base_url="https://api.moonshot.cn/v1",
+        # 旧：    api_key=api_key,
+        # 旧：    temperature=temperature,   # kimi-k3 仅接受 1
+        # 旧：    max_tokens=1024,
+        # 旧：    max_retries=5,
+        # 旧：)
         self.llm = ChatOpenAI(
             model=model_name,
-            base_url="https://api.moonshot.cn/v1",
+            base_url=os.getenv("API_BASE_URL", "https://api.llm.ustc.edu.cn/v1"),
             api_key=api_key,
-            temperature=temperature,   # kimi-k3 仅接受 1
+            temperature=temperature,   # 旧：kimi-k3 仅接受 1；GLM 支持 0~1
             max_tokens=1024,
             max_retries=5,
         )

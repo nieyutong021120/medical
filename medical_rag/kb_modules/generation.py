@@ -13,7 +13,9 @@ import logging
 from typing import List
 
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_community.chat_models.moonshot import MoonshotChat
+# 旧：Moonshot 官方 SDK 封装；现统一改用 ChatOpenAI 指向 OpenAI 兼容端点
+# from langchain_community.chat_models.moonshot import MoonshotChat
+from langchain_openai import ChatOpenAI
 from langchain_core.documents import Document
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
@@ -26,7 +28,8 @@ DISCLAIMER = "\n\n---\n⚠️ 本回答基于华佗开源医疗问答库（Huatu
 class GenerationModule:
     """生成集成模块 - 医疗问答"""
 
-    def __init__(self, model_name: str = "kimi-k3", temperature: float = 0.2, max_tokens: int = 2048):
+    # 旧：def __init__(self, model_name: str = "kimi-k3", temperature: float = 0.2, max_tokens: int = 2048):
+    def __init__(self, model_name: str = "glm-5.3-flash", temperature: float = 0.2, max_tokens: int = 2048):
         self.model_name = model_name
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -35,15 +38,28 @@ class GenerationModule:
 
     def setup_llm(self):
         logger.info(f"正在初始化生成LLM: {self.model_name}")
-        api_key = os.getenv("MOONSHOT_API_KEY")
+        # 旧：Moonshot 官方端点 + MOONSHOT_API_KEY；现换本地 OpenAI 兼容端点，
+        # API_KEY / API_BASE_URL 来自 medical_rag/.env（后端 config.py 以 override=True 加载）
+        # api_key = os.getenv("MOONSHOT_API_KEY")
+        # if not api_key:
+        #     raise ValueError("请设置 MOONSHOT_API_KEY 环境变量")
+        # self.llm = MoonshotChat(
+        #     model=self.model_name,
+        #     temperature=self.temperature,
+        #     max_tokens=self.max_tokens,
+        #     max_retries=5,
+        #     moonshot_api_key=api_key,
+        # )
+        api_key = os.getenv("API_KEY")
         if not api_key:
-            raise ValueError("请设置 MOONSHOT_API_KEY 环境变量")
-        self.llm = MoonshotChat(
+            raise ValueError("请设置 API_KEY 环境变量")
+        self.llm = ChatOpenAI(
             model=self.model_name,
+            base_url=os.getenv("API_BASE_URL", "https://api.llm.ustc.edu.cn/v1"),
+            api_key=api_key,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
             max_retries=5,
-            moonshot_api_key=api_key,
         )
         logger.info("生成LLM初始化完成")
 

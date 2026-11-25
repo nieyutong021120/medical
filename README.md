@@ -1,6 +1,6 @@
 # 华佗医疗智能助手
 
-基于 **Huatuo-Lite 开源医疗问答库（177,703 条真实问答）** 的 RAG 医疗问答系统：Next.js 前端 + FastAPI 后端 + FAISS/BM25 混合检索 + Moonshot LLM 生成。回答附参考问答溯源、建议科室与相关疾病提示。
+基于 **Huatuo-Lite 开源医疗问答库（177,703 条真实问答）** 的 RAG 医疗问答系统：Next.js 前端 + FastAPI 后端 + FAISS/BM25 混合检索 + GLM LLM 生成（OpenAI 兼容协议）。回答附参考问答溯源、建议科室与相关疾病提示。
 
 > 演示项目：回答仅供健康参考，不能替代执业医师的面诊、诊断与治疗建议。如有不适请及时到正规医疗机构就诊。
 
@@ -24,7 +24,7 @@
 | 后端 | FastAPI + uvicorn，SSE 流式接口，JWT（PyJWT）用户认证，SQLite（WAL）用户与会话存储 |
 | RAG | LangChain 模块骨架：ingestion / indexing / retrieval / dialogue / generation |
 | 检索 | FAISS（向量）+ BM25（jieba 分词），RRF 融合 + score 加权 |
-| 模型 | 嵌入 BAAI/bge-small-zh-v1.5（本地 HF 缓存，离线加载）；生成 kimi-k3（Moonshot API，temperature 固定 1） |
+| 模型 | 嵌入 BAAI/bge-small-zh-v1.5（本地 HF 缓存，离线加载）；生成 glm-5.3-flash（OpenAI 兼容端点，`API_BASE_URL` 可配，默认 `https://api.llm.ustc.edu.cn/v1`，temperature 0.2） |
 | 数据 | `Huatuo-Lite/format_data.jsonl`（question / answer / score / label / related_diseases） |
 
 ## 快速开始
@@ -56,7 +56,7 @@ python medical_rag/scripts/build_inverted_bm25.py  # 由 bm25.pkl 转换 inverte
 python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 ```
 
-- 先复制 `medical_rag/.env.example` 为 `medical_rag/.env`，填入 `MOONSHOT_API_KEY`（override=True 为唯一权威来源）。
+- 先复制 `medical_rag/.env.example` 为 `medical_rag/.env`，填入 `API_KEY`（OpenAI 兼容端点的密钥）与 `API_BASE_URL`（默认 `https://api.llm.ustc.edu.cn/v1`，代码有同名默认值兜底）；override=True 为唯一权威来源。
 - 前端地址从 `backend/.env` 的 `FRONTEND_URL` 读取（用作 CORS 跨域白名单，默认 `http://localhost:3000`）；同文件还须配置 `JWT_SECRET`（JWT 签名密钥，缺失则启动报错）。模板见 `backend/.env.example`。监听 host/port 由 uvicorn 命令行控制。
 
 ### 4. 启动前端
@@ -156,7 +156,7 @@ Huatuo-Lite/                数据集目录（README.md / my_dataset.py 入库�
 
 - 数据集为历史开源问答，非权威临床指南；score=4 占 87%，存在少量噪声回答
 - 答案偏短（平均百余字），不适合深度科普；急诊科样本仅 1 条，不做急症分诊
-- Moonshot 组织级限速 RPM=3，连续提问可能触发重试等待
+- 生成端点为本地部署的 OpenAI 兼容服务，限速取决于部署配置（旧 Moonshot 组织级 RPM=3 约束已不存在）
 
 ## 声明
 

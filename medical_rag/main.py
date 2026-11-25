@@ -55,8 +55,8 @@ class MedicalSystem:
 
         if not Path(self.config.data_path).exists():
             raise FileNotFoundError(f"数据文件不存在: {self.config.data_path}")
-        if not os.getenv("MOONSHOT_API_KEY"):
-            raise ValueError("请设置 MOONSHOT_API_KEY 环境变量")
+        if not os.getenv("API_KEY"):
+            raise ValueError("请设置 API_KEY 环境变量")
 
     def initialize_system(self):
         print("正在初始化医疗RAG系统...")

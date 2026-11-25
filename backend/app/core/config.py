@@ -16,7 +16,7 @@ RAG_DIR = ROOT / "medical_rag"
 # 嵌入模型已在本机 HF 缓存，离线加载避免启动时访问网络
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
-# 以 RAG 的 .env 为唯一权威来源：override=True 强制覆盖系统/会话里残留的旧 MOONSHOT_API_KEY
+# 以 RAG 的 .env 为唯一权威来源：override=True 强制覆盖系统/会话里残留的旧 API_KEY / MOONSHOT_API_KEY
 load_dotenv(RAG_DIR / ".env", override=True)
 # 后端部署配置（FRONTEND_URL / JWT_SECRET）来自 backend/.env；不覆盖已存在的系统环境变量
 load_dotenv(BACKEND_DIR / ".env")
