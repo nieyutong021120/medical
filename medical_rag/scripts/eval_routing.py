@@ -112,8 +112,8 @@ def print_report(m):
 
 def main():
     ap = argparse.ArgumentParser(description="意图路由独立评测")
-    ap.add_argument("--cases", default=str(SCRIPTS_DIR / "eval_routing_cases.jsonl"))
-    ap.add_argument("--out", default=str(SCRIPTS_DIR / "eval_routing_results.json"))
+    ap.add_argument("--cases", default=str(SCRIPTS_DIR / "eval_routing_cases_v2.jsonl"))
+    ap.add_argument("--out", default=str(SCRIPTS_DIR / "eval_routing_results_v2.json"))
     ap.add_argument("--interval", type=float, default=21.0, help="每次调用间隔秒数（旧 Moonshot RPM=3 需 ≥20s；本地端点可调小）")
     ap.add_argument("--limit", type=int, default=0, help="只跑前 N 条（冒烟测试）")
     ap.add_argument("--resume", action="store_true", help="跳过 progress 文件中已完成的 id")
@@ -127,7 +127,7 @@ def main():
     if args.limit:
         cases = cases[:args.limit]
 
-    progress_path = Path(args.out).with_name(Path(args.out).stem + "_progress.jsonl")
+    progress_path = Path(args.out).with_name(Path(args.out).stem + "_progress_v2.jsonl")
     records = {}
     if args.resume and progress_path.exists():
         for line in progress_path.read_text(encoding="utf-8").splitlines():
