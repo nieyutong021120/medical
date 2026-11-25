@@ -1,0 +1,60 @@
+{"id": 1, "question": "糖尿病有哪些典型症状？", "history": [], "expected": "medical_qa", "tag": "easy"}
+{"id": 2, "question": "高血压患者能吃党参吗？", "history": [], "expected": "medical_qa", "tag": "easy"}
+{"id": 3, "question": "痔疮手术后要注意什么？", "history": [], "expected": "medical_qa", "tag": "easy"}
+{"id": 4, "question": "阿莫西林和头孢有什么区别？", "history": [], "expected": "medical_qa", "tag": "easy"}
+{"id": 5, "question": "孩子发烧38.5度应该怎么处理？", "history": [], "expected": "medical_qa", "tag": "easy"}
+{"id": 6, "question": "幽门螺杆菌感染怎么治疗？", "history": [], "expected": "medical_qa", "tag": "easy"}
+{"id": 7, "question": "孕妇可以补牙吗？", "history": [], "expected": "medical_qa", "tag": "easy"}
+{"id": 8, "question": "乙肝大三阳会通过一起吃饭传染吗？", "history": [], "expected": "medical_qa", "tag": "easy"}
+{"id": 9, "question": "痛风患者不能吃什么食物？", "history": [], "expected": "medical_qa", "tag": "easy"}
+{"id": 10, "question": "做胃镜检查前需要空腹多久？", "history": [], "expected": "medical_qa", "tag": "easy"}
+{"id": 11, "question": "它有哪些并发症？", "history": [{"role": "user", "text": "高血压平时要注意什么？"}, {"role": "assistant", "text": "建议低盐饮食、规律服药、定期监测血压。"}], "expected": "medical_qa", "tag": "history"}
+{"id": 12, "question": "二甲双胍饭前吃还是饭后吃？", "history": [{"role": "user", "text": "糖尿病怎么控制血糖？"}, {"role": "assistant", "text": "需饮食控制、规律运动，必要时遵医嘱用药。"}], "expected": "medical_qa", "tag": "history"}
+{"id": 13, "question": "布洛芬一天最多吃几次？", "history": [], "expected": "medical_qa", "tag": "boundary"}
+{"id": 14, "question": "近视多少度可以做激光手术？", "history": [], "expected": "medical_qa", "tag": "easy"}
+{"id": 15, "question": "荨麻疹反复发作怎么办？", "history": [], "expected": "medical_qa", "tag": "boundary"}
+{"id": 16, "question": "甲状腺结节4a类严重吗？", "history": [], "expected": "medical_qa", "tag": "easy"}
+{"id": 17, "question": "感冒灵颗粒和阿莫西林能一起吃吗？", "history": [], "expected": "medical_qa", "tag": "easy"}
+{"id": 18, "question": "拔智齿后多久能正常吃饭？", "history": [], "expected": "medical_qa", "tag": "easy"}
+{"id": 19, "question": "空腹血糖6.8算糖尿病吗？", "history": [{"role": "user", "text": "我最近体检血糖偏高"}, {"role": "assistant", "text": "建议控制精制糖摄入并复查空腹血糖。"}], "expected": "medical_qa", "tag": "history"}
+{"id": 20, "question": "肺结核规范治疗一般要多久？", "history": [], "expected": "medical_qa", "tag": "easy"}
+{"id": 21, "question": "最近老是觉得累是怎么回事？", "history": [], "expected": "complex_or_ambiguous", "tag": "easy"}
+{"id": 22, "question": "我这两天不太舒服，咋办？", "history": [], "expected": "complex_or_ambiguous", "tag": "easy"}
+{"id": 23, "question": "肚子疼还想吐，头也晕晕的，是怎么回事？", "history": [], "expected": "complex_or_ambiguous", "tag": "easy"}
+{"id": 24, "question": "胸口闷闷的，有时候还发慌，是怎么了？", "history": [], "expected": "complex_or_ambiguous", "tag": "easy"}
+{"id": 25, "question": "我这头疼好几天了，是不是得什么大病了？", "history": [], "expected": "complex_or_ambiguous", "tag": "boundary"}
+{"id": 26, "question": "身上老是痒，也没起疹子，怎么回事？", "history": [], "expected": "complex_or_ambiguous", "tag": "boundary"}
+{"id": 27, "question": "睡不好，白天也没精神，怎么办？", "history": [], "expected": "complex_or_ambiguous", "tag": "easy"}
+{"id": 28, "question": "最近瘦了不少，正常吗？", "history": [], "expected": "complex_or_ambiguous", "tag": "easy"}
+{"id": 29, "question": "手脚发麻是什么问题？", "history": [], "expected": "complex_or_ambiguous", "tag": "easy"}
+{"id": 30, "question": "我妈妈最近总说难受，也说不上来哪难受，怎么办？", "history": [], "expected": "complex_or_ambiguous", "tag": "easy"}
+{"id": 31, "question": "天旋地转的，昨天开始，翻身的时候更厉害", "history": [{"role": "user", "text": "我最近头晕该怎么办？"}, {"role": "assistant", "text": "请问头晕是天旋地转还是昏昏沉沉？持续多久了？"}], "expected": "complex_or_ambiguous", "tag": "clarify_reply"}
+{"id": 32, "question": "右下边，从昨晚开始的", "history": [{"role": "user", "text": "肚子一阵一阵疼是怎么回事？"}, {"role": "assistant", "text": "请问疼痛的位置在哪里？大概持续多久了？"}], "expected": "complex_or_ambiguous", "tag": "clarify_reply"}
+{"id": 33, "question": "有点白痰，快三周了", "history": [{"role": "user", "text": "我老是咳嗽怎么办？"}, {"role": "assistant", "text": "请问咳嗽有痰吗？持续多久了？"}], "expected": "complex_or_ambiguous", "tag": "clarify_reply"}
+{"id": 34, "question": "一阵一阵的", "history": [{"role": "user", "text": "最近总心慌"}, {"role": "assistant", "text": "请问心慌是持续性的还是一阵一阵的？发作时有没有胸闷出汗？"}], "expected": "complex_or_ambiguous", "tag": "clarify_reply"}
+{"id": 35, "question": "上不来气，浑身没劲，咋回事？", "history": [], "expected": "complex_or_ambiguous", "tag": "easy"}
+{"id": 36, "question": "孩子最近不对劲，饭也不好好吃，咋办？", "history": [], "expected": "complex_or_ambiguous", "tag": "easy"}
+{"id": 37, "question": "我这是不是湿气重啊？", "history": [], "expected": "complex_or_ambiguous", "tag": "boundary"}
+{"id": 38, "question": "最近总感觉哪里不对，说不上来，要去医院吗？", "history": [], "expected": "complex_or_ambiguous", "tag": "easy"}
+{"id": 39, "question": "血压有点高，头也晕晕的，要不要紧？", "history": [], "expected": "complex_or_ambiguous", "tag": "boundary"}
+{"id": 40, "question": "眼皮老是跳，是不是身体出问题了？", "history": [], "expected": "complex_or_ambiguous", "tag": "easy"}
+{"id": 41, "question": "今天天气怎么样？", "history": [], "expected": "out_of_scope", "tag": "easy"}
+{"id": 42, "question": "帮我写一首关于春天的诗", "history": [], "expected": "out_of_scope", "tag": "easy"}
+{"id": 43, "question": "用Python写个快速排序", "history": [], "expected": "out_of_scope", "tag": "easy"}
+{"id": 44, "question": "推荐几部好看的悬疑电影", "history": [], "expected": "out_of_scope", "tag": "easy"}
+{"id": 45, "question": "股票和基金新手应该先买哪个？", "history": [], "expected": "out_of_scope", "tag": "easy"}
+{"id": 46, "question": "劳动合同到期公司不续签有补偿吗？", "history": [], "expected": "out_of_scope", "tag": "easy"}
+{"id": 47, "question": "给我讲个笑话吧", "history": [], "expected": "out_of_scope", "tag": "easy"}
+{"id": 48, "question": "昨晚欧冠决赛谁赢了？", "history": [], "expected": "out_of_scope", "tag": "easy"}
+{"id": 49, "question": "帮我写一段阿司匹林的广告文案", "history": [], "expected": "out_of_scope", "tag": "disguise"}
+{"id": 50, "question": "以\"高血压\"为题写一篇800字作文", "history": [], "expected": "out_of_scope", "tag": "disguise"}
+{"id": 51, "question": "医生这个职业的发展前景怎么样？", "history": [], "expected": "out_of_scope", "tag": "disguise"}
+{"id": 52, "question": "医院挂号系统一般用什么数据库？", "history": [], "expected": "out_of_scope", "tag": "disguise"}
+{"id": 53, "question": "\"糖尿病\"用英文怎么翻译？", "history": [], "expected": "out_of_scope", "tag": "disguise"}
+{"id": 54, "question": "现在房贷利率大概是多少？", "history": [], "expected": "out_of_scope", "tag": "easy"}
+{"id": 55, "question": "对了，推荐几部适合生病时看的轻松电影", "history": [{"role": "user", "text": "我感冒了要注意什么？"}, {"role": "assistant", "text": "建议多休息、多饮水，症状加重及时就医。"}], "expected": "out_of_scope", "tag": "history"}
+{"id": 56, "question": "王者荣耀哪个英雄好上分？", "history": [], "expected": "out_of_scope", "tag": "easy"}
+{"id": 57, "question": "教我做红烧肉", "history": [], "expected": "out_of_scope", "tag": "easy"}
+{"id": 58, "question": "帮我修改一下求职简历", "history": [], "expected": "out_of_scope", "tag": "easy"}
+{"id": 59, "question": "我感冒了，帮我写一张给老师的请假条", "history": [], "expected": "out_of_scope", "tag": "disguise"}
+{"id": 60, "question": "附近有什么好吃的火锅店推荐？", "history": [], "expected": "out_of_scope", "tag": "easy"}
