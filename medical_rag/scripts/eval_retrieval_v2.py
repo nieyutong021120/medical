@@ -144,6 +144,8 @@ def main():
     ap.add_argument("--n", type=int, default=300)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--rerank", action="store_true", help="启用 bge-reranker-base 精排配置 HR")
+    ap.add_argument("--rerank-k", type=int, default=RERANK_CANDIDATES,
+                    help="精排候选条数（默认 20；设 10 可与 k=20 结果对比候选池贡献）")
     ap.add_argument("--score-coef", type=float, default=0.05, help="HW 配置的质量分加权系数")
     ap.add_argument("--para-cache", default=str(SCRIPTS_DIR / "eval_para_queries.jsonl"))
     ap.add_argument("--build-para", type=int, default=0, help="生成 N 条口语改写缓存后退出")
@@ -163,7 +165,7 @@ def main():
     idx = IndexingModule(index_save_path=str(RAG_DIR / "vector_index"))
     vs = idx.load_index()
     bm = idx.load_bm25_index()
-    fetch_k = RERANK_CANDIDATES if args.rerank else RETRIEVER_K
+    fetch_k = args.rerank_k if args.rerank else RETRIEVER_K
     bm.k = fetch_k
 
     reranker = None
@@ -231,7 +233,7 @@ def main():
             }
             if reranker:
                 cand, _ = rrf_fuse(v_docs, b_docs)
-                cand = cand[:RERANK_CANDIDATES]
+                cand = cand[:args.rerank_k]
                 pairs = [(q, (x.page_content + "\n" + x.metadata.get("answer", ""))[:512]) for x in cand]
                 t0 = time.perf_counter()
                 rr_scores = reranker.predict(pairs)
